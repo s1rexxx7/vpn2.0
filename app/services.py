@@ -120,26 +120,19 @@ class YooKassaService:
                 "tax_system_code": self.settings.YOOKASSA_TAX_SYSTEM_CODE,
             }
 
+        response = Payment.create(payload, str(uuid4()))
+
         logger.info(
-            "Creating YooKassa payment: order_id=%s tg_id=%s plan=%s amount=%s receipt_email=%s",
+            "YooKassa payment created: order_id=%s payment_id=%s status=%s paid=%s receipt_registration=%s",
             order.id,
-            order.tg_id,
-            order.plan_code,
-            order.amount,
-            order.receipt_email,
+            response.id,
+            getattr(response, "status", None),
+            getattr(response, "paid", None),
+            getattr(response, "receipt_registration", None),
         )
 
-        response = Payment.create(payload, str(uuid4()))
         payment_id = response.id
         pay_url = response.confirmation.confirmation_url
-
-        logger.info(
-            "YooKassa payment created: order_id=%s payment_id=%s pay_url=%s",
-            order.id,
-            payment_id,
-            pay_url,
-        )
-
         return payment_id, pay_url
 
     def get_payment(self, payment_id: str):
@@ -370,6 +363,13 @@ class SubscriptionService:
 
         payment = self.yookassa.get_payment(payment_id)
         payment_status = getattr(payment, "status", None)
+        logger.info(
+            "Payment status check: payment_id=%s status=%s paid=%s receipt_registration=%s",
+            payment_id,
+            getattr(payment, "status", None),
+            getattr(payment, "paid", None),
+            getattr(payment, "receipt_registration", None),
+        )
 
         if payment_status != "succeeded":
             logger.warning(
