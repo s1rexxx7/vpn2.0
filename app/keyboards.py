@@ -22,9 +22,9 @@ def buy_menu_kb() -> InlineKeyboardMarkup:
     builder.row(
         InlineKeyboardButton(text="🇩🇪 VPN Германия", callback_data="product:germany")
     )
-    # builder.row(
-    #     InlineKeyboardButton(text="🚀 Обход глушилок", callback_data="product:bypass")
-    #)
+    builder.row(
+        InlineKeyboardButton(text="🚀 Обход глушилок", callback_data="product:bypass")
+    )
     builder.row(
         InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:main")
     )

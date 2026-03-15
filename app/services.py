@@ -12,6 +12,13 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from yookassa import Configuration, Payment
 
+from pathlib import Path
+from aiogram.types import FSInputFile
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+ASSETS_DIR = BASE_DIR / "assets"
+THANKS_PHOTO = ASSETS_DIR / "thanks.png"
+
 from app.config import Settings, XUIServerConfig
 from app.models import Order, User
 from app.keyboards import success_payment_kb
@@ -479,23 +486,27 @@ class SubscriptionService:
 
     async def send_success_message(self, order: Order) -> None:
         expires_str = order.expires_at.strftime("%d.%m.%Y %H:%M") if order.expires_at else "-"
+
         text = (
-            "✅ Оплата прошла успешно.\n\n"
+            "✅ Спасибо за покупку!\n\n"
             f"Ваш продукт: <b>{order.product_name}</b>\n"
             f"Срок: <b>{order.months} мес.</b>\n"
             f"Доступ действует до: <b>{expires_str}</b>\n\n"
-            "🔗 Ваша sub-ссылка:\n"
+            "Ваша sub-ссылка:\n"
             f"<code>{order.sub_url}</code>\n\n"
             "Сохраните её. Она также доступна в личном кабинете."
         )
 
-        logger.info("Sending success message: order_id=%s tg_id=%s", order.id, order.tg_id)
-        await self.bot.send_message(
-            order.tg_id,
-            text,
+        logger.info("Sending success message with photo: order_id=%s tg_id=%s", order.id, order.tg_id)
+
+        await self.bot.send_photo(
+            chat_id=order.tg_id,
+            photo=FSInputFile(THANKS_PHOTO),
+            caption=text,
             reply_markup=success_payment_kb(),
         )
-        logger.info("Success message sent: order_id=%s tg_id=%s", order.id, order.tg_id)
+
+        logger.info("Success photo message sent: order_id=%s tg_id=%s", order.id, order.tg_id)
 
     async def get_order_by_payment_id(self, payment_id: str) -> Order | None:
         async with self.session_maker() as session:

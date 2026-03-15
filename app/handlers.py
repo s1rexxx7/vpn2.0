@@ -1,7 +1,9 @@
+from pathlib import Path
+
 from aiogram import F, Router
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, FSInputFile, Message
 
 from app.keyboards import (
     back_to_main_kb,
@@ -26,6 +28,46 @@ from app.texts import (
     START_TEXT,
 )
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+ASSETS_DIR = BASE_DIR / "assets"
+
+MAIN_MENU_PHOTO = ASSETS_DIR / "main_menu.png"
+PRODUCTS_PHOTO = ASSETS_DIR / "products.png"
+ORDER_PHOTO = ASSETS_DIR / "order.png"
+CABINET_PHOTO = ASSETS_DIR / "cabinet.png"
+
+
+async def send_photo_screen(
+    target: Message,
+    photo_path: Path,
+    caption: str,
+    reply_markup,
+):
+    await target.answer_photo(
+        photo=FSInputFile(photo_path),
+        caption=caption,
+        reply_markup=reply_markup,
+    )
+
+
+async def replace_with_photo(
+    callback: CallbackQuery,
+    photo_path: Path,
+    caption: str,
+    reply_markup,
+):
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+
+    await callback.message.answer_photo(
+        photo=FSInputFile(photo_path),
+        caption=caption,
+        reply_markup=reply_markup,
+    )
+    await callback.answer()
+
 
 def get_router(service: SubscriptionService) -> Router:
     router = Router()
@@ -38,29 +80,50 @@ def get_router(service: SubscriptionService) -> Router:
             username=message.from_user.username,
             first_name=message.from_user.first_name,
         )
-        await message.answer(START_TEXT, reply_markup=main_menu_kb())
+        await send_photo_screen(
+            target=message,
+            photo_path=MAIN_MENU_PHOTO,
+            caption=START_TEXT,
+            reply_markup=main_menu_kb(),
+        )
 
     @router.callback_query(F.data == "menu:main")
     async def menu_main(callback: CallbackQuery, state: FSMContext):
         await state.clear()
-        await callback.message.edit_text(START_TEXT, reply_markup=main_menu_kb())
-        await callback.answer()
+        await replace_with_photo(
+            callback=callback,
+            photo_path=MAIN_MENU_PHOTO,
+            caption=START_TEXT,
+            reply_markup=main_menu_kb(),
+        )
 
     @router.callback_query(F.data == "menu:buy")
     async def menu_buy(callback: CallbackQuery, state: FSMContext):
         await state.clear()
-        await callback.message.edit_text(BUY_MENU_TEXT, reply_markup=buy_menu_kb())
-        await callback.answer()
+        await replace_with_photo(
+            callback=callback,
+            photo_path=PRODUCTS_PHOTO,
+            caption=BUY_MENU_TEXT,
+            reply_markup=buy_menu_kb(),
+        )
 
     @router.callback_query(F.data == "product:germany")
     async def product_germany(callback: CallbackQuery):
-        await callback.message.edit_text(GERMANY_TEXT, reply_markup=germany_plans_kb())
-        await callback.answer()
+        await replace_with_photo(
+            callback=callback,
+            photo_path=PRODUCTS_PHOTO,
+            caption=GERMANY_TEXT,
+            reply_markup=germany_plans_kb(),
+        )
 
     @router.callback_query(F.data == "product:bypass")
     async def product_bypass(callback: CallbackQuery):
-        await callback.message.edit_text(BYPASS_TEXT, reply_markup=bypass_plans_kb())
-        await callback.answer()
+        await replace_with_photo(
+            callback=callback,
+            photo_path=PRODUCTS_PHOTO,
+            caption=BYPASS_TEXT,
+            reply_markup=bypass_plans_kb(),
+        )
 
     @router.callback_query(F.data.startswith("plan:"))
     async def choose_plan(callback: CallbackQuery, state: FSMContext):
@@ -70,14 +133,22 @@ def get_router(service: SubscriptionService) -> Router:
             return
 
         await state.update_data(plan_code=plan_code)
-        await callback.message.edit_text(RECEIPT_ASK_TEXT, reply_markup=receipt_choice_kb())
-        await callback.answer()
+        await replace_with_photo(
+            callback=callback,
+            photo_path=ORDER_PHOTO,
+            caption=RECEIPT_ASK_TEXT,
+            reply_markup=receipt_choice_kb(),
+        )
 
     @router.callback_query(F.data == "receipt:yes")
     async def receipt_yes(callback: CallbackQuery, state: FSMContext):
         await state.set_state(PurchaseState.waiting_receipt_email)
-        await callback.message.edit_text(ASK_EMAIL_TEXT, reply_markup=skip_email_kb())
-        await callback.answer()
+        await replace_with_photo(
+            callback=callback,
+            photo_path=ORDER_PHOTO,
+            caption=ASK_EMAIL_TEXT,
+            reply_markup=skip_email_kb(),
+        )
 
     @router.callback_query(F.data == "receipt:no")
     async def receipt_no(callback: CallbackQuery, state: FSMContext):
@@ -95,13 +166,14 @@ def get_router(service: SubscriptionService) -> Router:
             receipt_email=None,
         )
         pay_url = await service.create_payment_for_order(order.id)
-
         await state.clear()
-        await callback.message.edit_text(
-            PAYMENT_CREATED_TEXT,
+
+        await replace_with_photo(
+            callback=callback,
+            photo_path=ORDER_PHOTO,
+            caption=PAYMENT_CREATED_TEXT,
             reply_markup=payment_kb(pay_url),
         )
-        await callback.answer()
 
     @router.callback_query(F.data == "receipt:skip_email")
     async def receipt_skip_email(callback: CallbackQuery, state: FSMContext):
@@ -119,21 +191,22 @@ def get_router(service: SubscriptionService) -> Router:
             receipt_email=None,
         )
         pay_url = await service.create_payment_for_order(order.id)
-
         await state.clear()
-        await callback.message.edit_text(
-            PAYMENT_CREATED_TEXT,
+
+        await replace_with_photo(
+            callback=callback,
+            photo_path=ORDER_PHOTO,
+            caption=PAYMENT_CREATED_TEXT,
             reply_markup=payment_kb(pay_url),
         )
-        await callback.answer()
 
     @router.message(PurchaseState.waiting_receipt_email)
     async def receipt_email_handler(message: Message, state: FSMContext):
         email = (message.text or "").strip()
-
         if not is_valid_email(email):
             await message.answer(
-                "Некорректный email. Отправьте корректный адрес или нажмите «Пропустить».",
+                "Некорректный email.\n"
+                "Отправьте корректный адрес или нажмите «Пропустить».",
                 reply_markup=skip_email_kb(),
             )
             return
@@ -142,7 +215,10 @@ def get_router(service: SubscriptionService) -> Router:
         plan_code = data.get("plan_code")
         if not plan_code:
             await state.clear()
-            await message.answer("Тариф не найден. Начните заново.", reply_markup=back_to_main_kb())
+            await message.answer(
+                "Тариф не найден.\nНачните заново.",
+                reply_markup=back_to_main_kb(),
+            )
             return
 
         order = await service.create_order(
@@ -153,10 +229,12 @@ def get_router(service: SubscriptionService) -> Router:
             receipt_email=email,
         )
         pay_url = await service.create_payment_for_order(order.id)
-
         await state.clear()
-        await message.answer(
-            PAYMENT_CREATED_TEXT,
+
+        await send_photo_screen(
+            target=message,
+            photo_path=ORDER_PHOTO,
+            caption=PAYMENT_CREATED_TEXT,
             reply_markup=payment_kb(pay_url),
         )
 
@@ -164,7 +242,11 @@ def get_router(service: SubscriptionService) -> Router:
     async def menu_cabinet(callback: CallbackQuery, state: FSMContext):
         await state.clear()
         text = await service.get_cabinet_text(callback.from_user.id)
-        await callback.message.edit_text(text, reply_markup=cabinet_kb())
-        await callback.answer()
+        await replace_with_photo(
+            callback=callback,
+            photo_path=CABINET_PHOTO,
+            caption=text,
+            reply_markup=cabinet_kb(),
+        )
 
     return router
