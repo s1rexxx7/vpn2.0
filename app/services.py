@@ -482,6 +482,14 @@ class SubscriptionService:
             )
 
         logger.info("Cabinet requested: tg_id=%s active_orders=%s", tg_id, len(active_orders))
+        lines.append(
+            "📲 Как подключиться:\n"
+            "1. Установите клиент V2RayTun, Happ или другой совместимый клиент.\n"
+            "2. Откройте приложение и нажмите на «+».\n"
+            "3. Вставьте купленную ссылку.\n"
+            "4. Пользуйтесь!"
+        )
+
         return "\n".join(lines)
 
     async def send_success_message(self, order: Order) -> None:
