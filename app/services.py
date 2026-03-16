@@ -502,7 +502,11 @@ class SubscriptionService:
             f"Доступ действует до: <b>{expires_str}</b>\n\n"
             "Ваша sub-ссылка:\n"
             f"<code>{order.sub_url}</code>\n\n"
-            "Сохраните её. Она также доступна в личном кабинете."
+            "\n\n📲 Как подключиться:\n"
+            "1. Установите клиент V2RayTun, Happ или другой совместимый клиент.\n"
+            "2. Откройте приложение и нажмите на «+».\n"
+            "3. Вставьте купленную ссылку.\n"
+            "4. Пользуйтесь!"   
         )
 
         logger.info("Sending success message with photo: order_id=%s tg_id=%s", order.id, order.tg_id)
