@@ -21,7 +21,6 @@ class Order(Base):
     __tablename__ = "orders"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-
     tg_id: Mapped[int] = mapped_column(BigInteger, index=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -30,21 +29,23 @@ class Order(Base):
     product_name: Mapped[str] = mapped_column(String(255))
     months: Mapped[int] = mapped_column(Integer)
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
-
     receipt_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     status: Mapped[str] = mapped_column(String(50), default="pending")
-
     yookassa_payment_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     payment_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payment_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     server_key: Mapped[str] = mapped_column(String(50))
-
     xui_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     xui_client_uuid: Mapped[str | None] = mapped_column(String(255), nullable=True)
     xui_sub_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     sub_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    provisioning_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_warning_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

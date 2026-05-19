@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -6,7 +7,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
-
+from html import escape
 import httpx
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -38,33 +39,33 @@ class Plan:
 
 
 PLANS: dict[str, Plan] = {
-    "germany_1m": Plan(
-        code="germany_1m",
-        product_name="VPN Германия",
+    "finland_1m": Plan(
+        code="finland_1m",
+        product_name="VPN Финляндия",
         months=1,
         amount=Decimal("149.00"),
-        server_key="germany",
+        server_key="finland",
     ),
-    "germany_3m": Plan(
-        code="germany_3m",
-        product_name="VPN Германия",
+    "finland_3m": Plan(
+        code="finland_3m",
+        product_name="VPN Финляндия",
         months=3,
         amount=Decimal("349.00"),
-        server_key="germany",
+        server_key="finland",
     ),
-    "germany_6m": Plan(
-        code="germany_6m",
-        product_name="VPN Германия",
+    "finland_6m": Plan(
+        code="finland_6m",
+        product_name="VPN Финляндия",
         months=6,
         amount=Decimal("600.00"),
-        server_key="germany",
+        server_key="finland",
     ),
-    "germany_12m": Plan(
-        code="germany_12m",
-        product_name="VPN Германия",
+    "finland_12m": Plan(
+        code="finland_12m",
+        product_name="VPN Финляндия",
         months=12,
         amount=Decimal("1000.00"),
-        server_key="germany",
+        server_key="finland",
     ),
     "bypass_1m": Plan(
         code="bypass_1m",
@@ -175,8 +176,8 @@ class XUIService:
     async def create_client(self, tg_id: int, plan: Plan) -> dict[str, Any]:
         client_uuid = str(uuid4())
         sub_id = uuid4().hex[:16]
-        if plan.server_key == "germany":
-            email = f"🇩🇪 Германия_{sub_id}"
+        if plan.server_key == "finland":
+            email = f"🇫🇮 Финляндия_{sub_id}"
         elif plan.server_key == "bypass":
             email = f"🚀 Обход глушилок_{sub_id}"
         else:
@@ -268,12 +269,27 @@ class SubscriptionService:
         self.settings = settings
         self.session_maker = session_maker
         self.bot = bot
+
         self.yookassa = YooKassaService(settings)
         self.xui_services = {
-            "germany": XUIService(settings.germany_server),
+            "finland": XUIService(settings.finland_server),
             "bypass": XUIService(settings.bypass_server),
         }
+
+        self._payment_locks: dict[str, asyncio.Lock] = {}
         logger.info("SubscriptionService initialized")
+        logger.info("SubscriptionService initialized")
+
+    def is_admin(self, tg_id: int) -> bool:
+        return tg_id in self.settings.ADMIN_IDS
+
+
+    def _get_payment_lock(self, payment_id: str) -> asyncio.Lock:
+        lock = self._payment_locks.get(payment_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._payment_locks[payment_id] = lock
+        return lock
 
     async def ensure_user(self, tg_id: int, username: str | None, first_name: str | None) -> None:
         async with self.session_maker() as session:
@@ -354,16 +370,39 @@ class SubscriptionService:
             payment_id, pay_url = self.yookassa.create_payment(order)
             order.yookassa_payment_id = payment_id
             order.payment_url = pay_url
+            order.status = "payment_created"
+            order.last_error = None
+
             await session.commit()
-
-            logger.info(
-                "Payment saved to DB: order_id=%s payment_id=%s pay_url=%s",
-                order.id,
-                payment_id,
-                pay_url,
-            )
-
             return pay_url
+        
+    async def get_order_by_payment_id(self, payment_id: str) -> Order | None:
+        async with self.session_maker() as session:
+            result = await session.execute(
+                select(Order).where(Order.yookassa_payment_id == payment_id)
+            )
+            return result.scalar_one_or_none()
+
+
+    async def get_order_by_id(self, order_id: int) -> Order | None:
+        async with self.session_maker() as session:
+            result = await session.execute(select(Order).where(Order.id == order_id))
+            return result.scalar_one_or_none()
+
+
+    async def mark_order_warning_sent(self, payment_id: str, error_text: str) -> None:
+        async with self.session_maker() as session:
+            result = await session.execute(
+                select(Order).where(Order.yookassa_payment_id == payment_id)
+            )
+            order = result.scalar_one_or_none()
+            if not order:
+                return
+
+            order.status = "provision_error"
+            order.last_error = error_text[:4000]
+            order.last_warning_sent_at = datetime.utcnow()
+            await session.commit()
 
     async def process_success_payment(self, payment_id: str) -> Order | None:
         logger.info("process_success_payment start: payment_id=%s", payment_id)
@@ -449,6 +488,102 @@ class SubscriptionService:
             )
 
             return order
+        
+    async def handle_successful_payment_webhook(self, payment_id: str) -> None:
+        try:
+            order = await self.process_success_payment(payment_id)
+            if order and order.sub_url:
+                await self.send_success_message(order)
+        except Exception:
+            logger.exception("Unhandled background payment processing error: %s", payment_id)
+
+    async def send_provision_warning(self, payment_id: str) -> None:
+        order = await self.get_order_by_payment_id(payment_id)
+        if not order:
+            return
+
+        text = (
+            "⚠️ Оплата получена, но выдать доступ автоматически пока не удалось.\n\n"
+            "Мы уже сохранили заказ и попробуем обработать его повторно.\n"
+            "Через минуту можно нажать кнопку «Проверить оплату» в сообщении со ссылкой на оплату.\n\n"
+            "Если проблема не исчезнет — напишите в поддержку и пришлите ID оплаты:\n"
+            f"<code>{payment_id}</code>"
+        )
+
+        try:
+            await self.bot.send_message(chat_id=order.tg_id, text=text)
+        except Exception:
+            logger.exception("Failed to send warning message to tg_id=%s", order.tg_id)
+
+    async def check_and_describe_order_payment(self, tg_id: int, order_id: int) -> str:
+        order = await self.get_order_by_id(order_id)
+        if not order or order.tg_id != tg_id:
+            return "Заказ не найден."
+
+        if order.status == "paid" and order.sub_url:
+            return "Оплата уже подтверждена, доступ выдан."
+
+        if not order.yookassa_payment_id:
+            return "У заказа пока нет ID оплаты. Попробуйте создать оплату заново."
+
+        try:
+            payment = self.yookassa.get_payment(order.yookassa_payment_id)
+        except Exception:
+            logger.exception("Manual payment check failed: order_id=%s", order_id)
+            return "Не удалось проверить оплату прямо сейчас. Попробуйте чуть позже."
+
+        payment_status = getattr(payment, "status", None)
+
+        if payment_status == "succeeded":
+            processed_order = await self.process_success_payment(order.yookassa_payment_id)
+            if processed_order and processed_order.sub_url:
+                await self.send_success_message(processed_order)
+                return "Оплата подтверждена. Доступ выдан."
+            return "Оплата есть, но доступ ещё выдаётся. Подождите немного и откройте кабинет."
+
+        if payment_status in {"pending", "waiting_for_capture"}:
+            return "Оплата ещё не подтверждена. Если вы уже оплатили — подождите 30–60 секунд и проверьте снова."
+
+        if payment_status == "canceled":
+            return "Платёж отменён или не завершён."
+
+        return f"Текущий статус платежа: {payment_status or 'неизвестно'}"
+    
+    async def broadcast_message(
+        self,
+        text: str,
+        initiated_by: int,
+        parse_mode: str | None = "HTML",
+    ) -> dict[str, int]:
+        async with self.session_maker() as session:
+            result = await session.execute(select(User.tg_id).order_by(User.id))
+            tg_ids = list(result.scalars().all())
+
+        sent = 0
+        failed = 0
+
+        for tg_id in tg_ids:
+            try:
+                await self.bot.send_message(
+                    chat_id=tg_id,
+                    text=text,
+                    parse_mode=parse_mode,
+                )
+                sent += 1
+            except Exception:
+                failed += 1
+                logger.exception(
+                    "Broadcast send failed: initiated_by=%s target_tg_id=%s",
+                    initiated_by,
+                    tg_id,
+                )
+            await asyncio.sleep(0.03)
+
+        return {
+            "total": len(tg_ids),
+            "sent": sent,
+            "failed": failed,
+        }
 
     async def get_cabinet_text(self, tg_id: int) -> str:
         async with self.session_maker() as session:

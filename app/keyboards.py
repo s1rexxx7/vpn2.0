@@ -20,7 +20,7 @@ def back_to_main_kb() -> InlineKeyboardMarkup:
 def buy_menu_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="🇩🇪 VPN Германия", callback_data="product:germany")
+        InlineKeyboardButton(text="🇫🇮 VPN Финляндия", callback_data="product:finland")
     )
     builder.row(
         InlineKeyboardButton(text="🚀 Обход глушилок", callback_data="product:bypass")
@@ -31,12 +31,12 @@ def buy_menu_kb() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def germany_plans_kb() -> InlineKeyboardMarkup:
+def finland_plans_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="💳 149р на месяц", callback_data="plan:germany_1m"))
-    builder.row(InlineKeyboardButton(text="💳 349р на 3 месяца", callback_data="plan:germany_3m"))
-    builder.row(InlineKeyboardButton(text="💳 600р на 6 месяцев", callback_data="plan:germany_6m"))
-    builder.row(InlineKeyboardButton(text="💳 1000р на год", callback_data="plan:germany_12m"))
+    builder.row(InlineKeyboardButton(text="💳 149р на месяц", callback_data="plan:finland_1m"))
+    builder.row(InlineKeyboardButton(text="💳 349р на 3 месяца", callback_data="plan:finland_3m"))
+    builder.row(InlineKeyboardButton(text="💳 600р на 6 месяцев", callback_data="plan:finland_6m"))
+    builder.row(InlineKeyboardButton(text="💳 1000р на год", callback_data="plan:finland_12m"))
     builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="menu:buy"))
     return builder.as_markup()
 
@@ -65,10 +65,16 @@ def skip_email_kb() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def payment_kb(pay_url: str) -> InlineKeyboardMarkup:
+def payment_kb(pay_url: str, order_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="💳 Оплатить", url=pay_url))
-    builder.row(InlineKeyboardButton(text="👤 Личный кабинет", callback_data="menu:cabinet"))
+    builder.row(InlineKeyboardButton(text="Оплатить", url=pay_url))
+    builder.row(
+        InlineKeyboardButton(
+            text="Проверить оплату",
+            callback_data=f"payment:check:{order_id}",
+        )
+    )
+    builder.row(InlineKeyboardButton(text="Личный кабинет", callback_data="menu:cabinet"))
     builder.row(InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:main"))
     return builder.as_markup()
 
